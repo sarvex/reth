@@ -4038,6 +4038,7 @@ dependencies = [
  "reth-db",
  "reth-discv4",
  "reth-downloaders",
+ "reth-eth-wire",
  "reth-executor",
  "reth-interfaces",
  "reth-net-nat",
