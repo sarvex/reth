@@ -4183,6 +4183,7 @@ dependencies = [
  "bytes",
  "futures",
  "futures-util",
+ "itertools 0.10.5",
  "metrics",
  "pin-project",
  "reth-db",
