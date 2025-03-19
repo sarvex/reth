@@ -12,15 +12,13 @@
 extern crate alloc;
 
 use alloy_consensus::BlockHeader;
-use alloy_eips::eip7685::Requests;
 use reth_errors::ConsensusError;
 use reth_payload_primitives::{
-    validate_execution_requests, BuiltPayload, EngineApiMessageVersion,
-    EngineObjectValidationError, InvalidPayloadAttributesError, NewPayloadError, PayloadAttributes,
-    PayloadOrAttributes, PayloadTypes,
+    BuiltPayload, EngineApiMessageVersion, EngineObjectValidationError,
+    InvalidPayloadAttributesError, NewPayloadError, PayloadAttributes, PayloadOrAttributes,
+    PayloadTypes,
 };
-use reth_primitives::{NodePrimitives, RecoveredBlock, SealedBlock};
-use reth_primitives_traits::Block;
+use reth_primitives_traits::{Block, NodePrimitives, RecoveredBlock, SealedBlock};
 use reth_trie_common::HashedPostState;
 use serde::{de::DeserializeOwned, Serialize};
 
@@ -41,6 +39,9 @@ pub use event::*;
 
 mod invalid_block_hook;
 pub use invalid_block_hook::InvalidBlockHook;
+
+pub mod config;
+pub use config::*;
 
 /// This type defines the versioned types of the engine API.
 ///
@@ -88,10 +89,9 @@ pub trait EngineTypes:
         + Send
         + Sync
         + 'static;
-    /// Execution data.
-    type ExecutionData: ExecutionPayload;
 
-    /// Converts a [`BuiltPayload`] into an [`Self::ExecutionData`].
+    /// Converts a [`BuiltPayload`] into an
+    /// [`PayloadTypes:ExecutionData`](reth_payload_primitives::PayloadTypes::ExecutionData).
     fn block_to_payload(
         block: SealedBlock<
             <<Self::BuiltPayload as BuiltPayload>::Primitives as NodePrimitives>::Block,
@@ -136,14 +136,6 @@ pub trait PayloadValidator: Send + Sync + Unpin + 'static {
 pub trait EngineValidator<Types: EngineTypes>:
     PayloadValidator<ExecutionData = Types::ExecutionData>
 {
-    /// Validates the execution requests according to [EIP-7685](https://eips.ethereum.org/EIPS/eip-7685).
-    fn validate_execution_requests(
-        &self,
-        requests: &Requests,
-    ) -> Result<(), EngineObjectValidationError> {
-        validate_execution_requests(requests)
-    }
-
     /// Validates the presence or exclusion of fork-specific fields based on the payload attributes
     /// and the message version.
     fn validate_version_specific_fields(

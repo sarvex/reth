@@ -21,7 +21,7 @@ pub use alloy_rpc_types_engine::{
 };
 use reth_engine_primitives::EngineTypes;
 use reth_payload_primitives::{BuiltPayload, PayloadTypes};
-use reth_primitives::{NodePrimitives, SealedBlock};
+use reth_primitives_traits::{NodePrimitives, SealedBlock};
 
 /// The types used in the default mainnet ethereum beacon consensus engine.
 #[derive(Debug, Default, Clone, serde::Deserialize, serde::Serialize)]
@@ -31,6 +31,7 @@ pub struct EthEngineTypes<T: PayloadTypes = EthPayloadTypes> {
 }
 
 impl<T: PayloadTypes> PayloadTypes for EthEngineTypes<T> {
+    type ExecutionData = T::ExecutionData;
     type BuiltPayload = T::BuiltPayload;
     type PayloadAttributes = T::PayloadAttributes;
     type PayloadBuilderAttributes = T::PayloadBuilderAttributes;
@@ -38,14 +39,13 @@ impl<T: PayloadTypes> PayloadTypes for EthEngineTypes<T> {
 
 impl<T> EngineTypes for EthEngineTypes<T>
 where
-    T: PayloadTypes,
-    T::BuiltPayload: BuiltPayload<Primitives: NodePrimitives<Block = reth_primitives::Block>>
+    T: PayloadTypes<ExecutionData = ExecutionData>,
+    T::BuiltPayload: BuiltPayload<Primitives: NodePrimitives<Block = reth_ethereum_primitives::Block>>
         + TryInto<ExecutionPayloadV1>
         + TryInto<ExecutionPayloadEnvelopeV2>
         + TryInto<ExecutionPayloadEnvelopeV3>
         + TryInto<ExecutionPayloadEnvelopeV4>,
 {
-    type ExecutionData = ExecutionData;
     type ExecutionPayloadEnvelopeV1 = ExecutionPayloadV1;
     type ExecutionPayloadEnvelopeV2 = ExecutionPayloadEnvelopeV2;
     type ExecutionPayloadEnvelopeV3 = ExecutionPayloadEnvelopeV3;
@@ -55,7 +55,7 @@ where
         block: SealedBlock<
             <<Self::BuiltPayload as BuiltPayload>::Primitives as NodePrimitives>::Block,
         >,
-    ) -> ExecutionData {
+    ) -> T::ExecutionData {
         let (payload, sidecar) =
             ExecutionPayload::from_block_unchecked(block.hash(), &block.into_block());
         ExecutionData { payload, sidecar }
@@ -71,4 +71,5 @@ impl PayloadTypes for EthPayloadTypes {
     type BuiltPayload = EthBuiltPayload;
     type PayloadAttributes = EthPayloadAttributes;
     type PayloadBuilderAttributes = EthPayloadBuilderAttributes;
+    type ExecutionData = ExecutionData;
 }

@@ -17,7 +17,7 @@ Options:
           Possible values are either a built-in chain or the path to a chain specification file.
 
           Built-in chains:
-              mainnet, sepolia, holesky, dev
+              mainnet, sepolia, holesky, hoodi, dev
 
           [default: mainnet]
 
@@ -336,6 +336,11 @@ RPC:
           By default this chooses a sensible value based on the number of available cores. Tracing requests are generally CPU bound. Choosing a value that is higher than the available CPU cores can have a negative impact on the performance of the node and affect the node's ability to maintain sync.
 
           [default: <NUM CPU CORES-2>]
+
+      --rpc.max-trace-filter-blocks <COUNT>
+          Maximum number of blocks for `trace_filter` requests
+
+          [default: 100]
 
       --rpc.max-blocks-per-filter <COUNT>
           Maximum number of blocks that could be scanned per filter request. (0 = entire chain)
@@ -720,6 +725,33 @@ Engine:
 
       --engine.state-root-task-compare-updates
           Enable comparing trie updates from the state root task to the trie updates from the regular state root calculation
+
+      --engine.accept-execution-requests-hash
+          Enables accepting requests hash instead of an array of requests in `engine_newPayloadV4`
+
+Ress:
+      --ress.enable
+          Enable support for `ress` subprotocol
+
+      --ress.max-active-connections <MAX_ACTIVE_CONNECTIONS>
+          The maximum number of active connections for `ress` subprotocol
+
+          [default: 5]
+
+      --ress.max-witness-window <MAX_WITNESS_WINDOW>
+          The maximum witness lookback window
+
+          [default: 1024]
+
+      --ress.witness-max-parallel <WITNESS_MAX_PARALLEL>
+          The maximum number of witnesses to generate in parallel
+
+          [default: 5]
+
+      --ress.witness-cache-size <WITNESS_CACHE_SIZE>
+          Witness cache size
+
+          [default: 10]
 
 Logging:
       --log.stdout.format <FORMAT>
