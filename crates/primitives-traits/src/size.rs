@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 use alloy_consensus::{
-    transaction::PooledTransaction, Header, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant,
-    TxEip4844WithSidecar, TxEip7702, TxEnvelope, TxLegacy, TxType,
+    EthereumTxEnvelope, Header, TxEip1559, TxEip2930, TxEip4844, TxEip4844Variant,
+    TxEip4844WithSidecar, TxEip7702, TxLegacy, TxType,
 };
 use alloy_eips::eip4895::Withdrawals;
-use alloy_primitives::{PrimitiveSignature as Signature, TxHash, B256};
+use alloy_primitives::{Signature, TxHash, B256};
 use revm_primitives::Log;
 
 /// Trait for calculating a heuristic for the in-memory size of a struct.
@@ -73,19 +73,7 @@ impl InMemorySize for alloy_consensus::Receipt {
     }
 }
 
-impl InMemorySize for PooledTransaction {
-    fn size(&self) -> usize {
-        match self {
-            Self::Legacy(tx) => tx.size(),
-            Self::Eip2930(tx) => tx.size(),
-            Self::Eip1559(tx) => tx.size(),
-            Self::Eip4844(tx) => tx.size(),
-            Self::Eip7702(tx) => tx.size(),
-        }
-    }
-}
-
-impl InMemorySize for TxEnvelope {
+impl<T: InMemorySize> InMemorySize for EthereumTxEnvelope<T> {
     fn size(&self) -> usize {
         match self {
             Self::Legacy(tx) => tx.size(),
@@ -122,6 +110,12 @@ impl<T: InMemorySize> InMemorySize for Vec<T> {
     fn size(&self) -> usize {
         // Note: This does not track additional capacity
         self.iter().map(T::size).sum::<usize>()
+    }
+}
+
+impl InMemorySize for u64 {
+    fn size(&self) -> usize {
+        core::mem::size_of::<Self>()
     }
 }
 

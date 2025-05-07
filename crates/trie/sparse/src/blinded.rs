@@ -5,6 +5,7 @@ use reth_execution_errors::SparseTrieError;
 use reth_trie_common::{Nibbles, TrieMask};
 
 /// Factory for instantiating blinded node providers.
+#[auto_impl::auto_impl(&)]
 pub trait BlindedProviderFactory {
     /// Type capable of fetching blinded account nodes.
     type AccountNodeProvider: BlindedProvider;
@@ -19,7 +20,7 @@ pub trait BlindedProviderFactory {
 }
 
 /// Revealed blinded trie node.
-#[derive(Debug)]
+#[derive(PartialEq, Eq, Clone, Debug)]
 pub struct RevealedNode {
     /// Raw trie node.
     pub node: Bytes,
@@ -30,6 +31,7 @@ pub struct RevealedNode {
 }
 
 /// Trie node provider for retrieving blinded nodes.
+#[auto_impl::auto_impl(&)]
 pub trait BlindedProvider {
     /// Retrieve blinded node by path.
     fn blinded_node(&self, path: &Nibbles) -> Result<Option<RevealedNode>, SparseTrieError>;

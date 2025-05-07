@@ -290,8 +290,7 @@ pub trait Trace:
             + Send
             + 'static,
         Setup: FnMut() -> Insp + Send + 'static,
-        Insp:
-            for<'a, 'b> InspectorFor<Self::Evm, StateCacheDbRefMutWrapper<'a, 'b>> + Send + 'static,
+        Insp: for<'a, 'b> InspectorFor<Self::Evm, StateCacheDbRefMutWrapper<'a, 'b>>,
         R: Send + 'static,
     {
         async move {
@@ -449,8 +448,7 @@ pub trait Trace:
             + Send
             + 'static,
         Setup: FnMut() -> Insp + Send + 'static,
-        Insp:
-            for<'a, 'b> InspectorFor<Self::Evm, StateCacheDbRefMutWrapper<'a, 'b>> + Send + 'static,
+        Insp: for<'a, 'b> InspectorFor<Self::Evm, StateCacheDbRefMutWrapper<'a, 'b>>,
         R: Send + 'static,
     {
         self.trace_block_until_with_inspector(block_id, block, None, insp_setup, f)
@@ -471,9 +469,9 @@ pub trait Trace:
 
         // apply relevant system calls
         let mut evm = self.evm_config().evm_with_env(db, evm_env.clone());
-        system_caller
-            .apply_pre_execution_changes(block.header(), &mut evm)
-            .map_err(|_| EthApiError::EvmCustom("failed to apply 4788 system call".to_string()))?;
+        system_caller.apply_pre_execution_changes(block.header(), &mut evm).map_err(|err| {
+            EthApiError::EvmCustom(format!("failed to apply 4788 system call {err}"))
+        })?;
 
         Ok(())
     }

@@ -26,7 +26,7 @@ PROFILE ?= release
 CARGO_INSTALL_EXTRA_FLAGS ?=
 
 # The release tag of https://github.com/ethereum/tests to use for EF tests
-EF_TESTS_TAG := v12.2
+EF_TESTS_TAG := v17.0
 EF_TESTS_URL := https://github.com/ethereum/tests/archive/refs/tags/$(EF_TESTS_TAG).tar.gz
 EF_TESTS_DIR := ./testing/ef-tests/ethereum-tests
 
@@ -291,6 +291,23 @@ op-docker-build-push-latest: ## Build and push a cross-arch Docker image tagged 
 .PHONY: op-docker-build-push-nightly
 op-docker-build-push-nightly: ## Build and push cross-arch Docker image tagged with the latest git tag with a `-nightly` suffix, and `latest-nightly`.
 	$(call op_docker_build_push,nightly,nightly)
+
+# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --name cross-builder`
+.PHONY: docker-build-push-nightly-profiling
+docker-build-push-nightly-profiling: ## Build and push cross-arch Docker image with profiling profile tagged with nightly-profiling.
+	$(call docker_build_push,nightly-profiling,nightly-profiling)
+
+	# Note: This requires a buildx builder with emulation support. For example:
+#
+# `docker run --privileged --rm tonistiigi/binfmt --install amd64,arm64`
+# `docker buildx create --use --name cross-builder`
+.PHONY: op-docker-build-push-nightly-profiling
+op-docker-build-push-nightly-profiling: ## Build and push cross-arch Docker image tagged with the latest git tag with a `-nightly` suffix, and `latest-nightly`.
+	$(call op_docker_build_push,nightly-profiling,nightly-profiling)
+
 
 # Create a cross-arch Docker image with the given tags and push it
 define op_docker_build_push

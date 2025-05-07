@@ -96,9 +96,9 @@ pub(super) mod serde_bincode_compat {
     /// }
     /// ```
     #[derive(Debug, Serialize, Deserialize)]
-    #[allow(missing_docs)]
+    #[expect(missing_docs)]
     #[serde(bound = "")]
-    #[allow(clippy::large_enum_variant)]
+    #[expect(clippy::large_enum_variant)]
     pub enum ExExNotification<'a, N>
     where
         N: NodePrimitives,
@@ -199,7 +199,7 @@ pub(super) mod serde_bincode_compat {
             }
 
             let mut bytes = [0u8; 1024];
-            rand::thread_rng().fill(bytes.as_mut_slice());
+            rand::rng().fill(bytes.as_mut_slice());
             let data = Data {
                 notification: ExExNotification::ChainReorged {
                     old: Arc::new(Chain::new(

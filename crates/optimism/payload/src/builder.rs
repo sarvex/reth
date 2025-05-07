@@ -24,17 +24,20 @@ use reth_evm::{
 use reth_execution_types::ExecutionOutcome;
 use reth_optimism_evm::OpNextBlockEnvAttributes;
 use reth_optimism_forks::OpHardforks;
-use reth_optimism_primitives::transaction::signed::OpTransaction;
-use reth_optimism_txpool::OpPooledTx;
+use reth_optimism_primitives::{transaction::OpTransaction, ADDRESS_L2_TO_L1_MESSAGE_PASSER};
+use reth_optimism_txpool::{
+    interop::{is_valid_interop, MaybeInteropTransaction},
+    OpPooledTx,
+};
 use reth_payload_builder_primitives::PayloadBuilderError;
 use reth_payload_primitives::PayloadBuilderAttributes;
 use reth_payload_util::{BestPayloadTransactions, NoopPayloadTransactions, PayloadTransactions};
 use reth_primitives_traits::{NodePrimitives, SealedHeader, SignedTransaction, TxTy};
-use reth_provider::{ProviderError, StateProvider, StateProviderFactory};
 use reth_revm::{
     cancelled::CancelOnDrop, database::StateProviderDatabase, db::State,
     witness::ExecutionWitnessRecord,
 };
+use reth_storage_api::{errors::ProviderError, StateProvider, StateProviderFactory};
 use reth_transaction_pool::{BestTransactionsAttributes, PoolTransaction, TransactionPool};
 use revm::context::{Block, BlockEnv};
 use std::sync::Arc;
@@ -68,7 +71,7 @@ impl<Pool, Client, Evm> OpPayloadBuilder<Pool, Client, Evm> {
     }
 
     /// Configures the builder with the given [`OpBuilderConfig`].
-    pub fn with_builder_config(
+    pub const fn with_builder_config(
         pool: Pool,
         client: Client,
         evm_config: Evm,
@@ -141,7 +144,9 @@ where
         best: impl FnOnce(BestTransactionsAttributes) -> Txs + Send + Sync + 'a,
     ) -> Result<BuildOutcome<OpBuiltPayload<N>>, PayloadBuilderError>
     where
-        Txs: PayloadTransactions<Transaction: PoolTransaction<Consensus = N::SignedTx>>,
+        Txs: PayloadTransactions<
+            Transaction: PoolTransaction<Consensus = N::SignedTx> + MaybeInteropTransaction,
+        >,
     {
         let BuildArguments { mut cached_reads, config, cancel, best_payload } = args;
 
@@ -264,7 +269,8 @@ pub struct OpBuilder<'a, Txs> {
 }
 
 impl<'a, Txs> OpBuilder<'a, Txs> {
-    fn new(best: impl FnOnce(BestTransactionsAttributes) -> Txs + Send + Sync + 'a) -> Self {
+    /// Creates a new [`OpBuilder`].
+    pub fn new(best: impl FnOnce(BestTransactionsAttributes) -> Txs + Send + Sync + 'a) -> Self {
         Self { best: Box::new(best) }
     }
 }
@@ -281,7 +287,9 @@ impl<Txs> OpBuilder<'_, Txs> {
         EvmConfig: ConfigureEvm<Primitives = N, NextBlockEnvCtx = OpNextBlockEnvAttributes>,
         ChainSpec: EthChainSpec + OpHardforks,
         N: OpPayloadPrimitives,
-        Txs: PayloadTransactions<Transaction: PoolTransaction<Consensus = N::SignedTx>>,
+        Txs: PayloadTransactions<
+            Transaction: PoolTransaction<Consensus = N::SignedTx> + MaybeInteropTransaction,
+        >,
     {
         let Self { best } = self;
         debug!(target: "payload_builder", id=%ctx.payload_id(), parent_header = ?ctx.parent().hash(), parent_number = ctx.parent().number, "building new payload");
@@ -373,10 +381,21 @@ impl<Txs> OpBuilder<'_, Txs> {
         ctx.execute_sequencer_transactions(&mut builder)?;
         builder.into_executor().apply_post_execution_changes()?;
 
-        let ExecutionWitnessRecord { hashed_state, codes, keys } =
+        if ctx.chain_spec.is_isthmus_active_at_timestamp(ctx.attributes().timestamp()) {
+            // force load `L2ToL1MessagePasser.sol` so l2 withdrawals root can be computed even if
+            // no l2 withdrawals in block
+            _ = db.load_cache_account(ADDRESS_L2_TO_L1_MESSAGE_PASSER)?;
+        }
+
+        let ExecutionWitnessRecord { hashed_state, codes, keys, lowest_block_number: _ } =
             ExecutionWitnessRecord::from_executed_state(&db);
         let state = state_provider.witness(Default::default(), hashed_state)?;
-        Ok(ExecutionWitness { state: state.into_iter().collect(), codes, keys })
+        Ok(ExecutionWitness {
+            state: state.into_iter().collect(),
+            codes,
+            keys,
+            ..Default::default()
+        })
     }
 }
 
@@ -391,7 +410,7 @@ pub trait OpPayloadTransactions<Transaction>: Clone + Send + Sync + Unpin + 'sta
     ) -> impl PayloadTransactions<Transaction = Transaction>;
 }
 
-impl<T: PoolTransaction> OpPayloadTransactions<T> for () {
+impl<T: PoolTransaction + MaybeInteropTransaction> OpPayloadTransactions<T> for () {
     fn best_transactions<Pool: TransactionPool<Transaction = T>>(
         &self,
         pool: Pool,
@@ -427,7 +446,7 @@ pub struct ExecutionInfo {
 
 impl ExecutionInfo {
     /// Create a new instance with allocated slots.
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self { cumulative_gas_used: 0, cumulative_da_bytes_used: 0, total_fees: U256::ZERO }
     }
 
@@ -610,7 +629,8 @@ where
         info: &mut ExecutionInfo,
         builder: &mut impl BlockBuilder<Primitives = Evm::Primitives>,
         mut best_txs: impl PayloadTransactions<
-            Transaction: PoolTransaction<Consensus = TxTy<Evm::Primitives>>,
+            Transaction: PoolTransaction<Consensus = TxTy<Evm::Primitives>>
+                             + MaybeInteropTransaction,
         >,
     ) -> Result<Option<()>, PayloadBuilderError> {
         let block_gas_limit = builder.evm_mut().block().gas_limit;
@@ -619,6 +639,7 @@ where
         let base_fee = builder.evm_mut().block().basefee;
 
         while let Some(tx) = best_txs.next(()) {
+            let interop = tx.interop_deadline();
             let tx = tx.into_consensus();
             if info.is_tx_over_limits(tx.inner(), block_gas_limit, tx_da_limit, block_da_limit) {
                 // we can't fit this transaction into the block, so we need to mark it as
@@ -634,6 +655,14 @@ where
                 continue
             }
 
+            // We skip invalid cross chain txs, they would be removed on the next block update in
+            // the maintenance job
+            if let Some(interop) = interop {
+                if !is_valid_interop(interop, self.config.attributes.timestamp()) {
+                    best_txs.mark_invalid(tx.signer(), tx.nonce());
+                    continue
+                }
+            }
             // check if the job was cancelled, if so we can exit early
             if self.cancel.is_cancelled() {
                 return Ok(Some(()))

@@ -13,7 +13,7 @@ use reth_trie::{
     HashedStorage,
 };
 use reth_trie_common::{HashBuilder, Nibbles};
-use reth_trie_sparse::{blinded::DefaultBlindedProvider, SparseTrie};
+use reth_trie_sparse::SparseTrie;
 
 fn calculate_root_from_leaves(c: &mut Criterion) {
     let mut group = c.benchmark_group("calculate root from leaves");
@@ -21,7 +21,7 @@ fn calculate_root_from_leaves(c: &mut Criterion) {
 
     for size in [1_000, 5_000, 10_000, 100_000] {
         // Too slow.
-        #[allow(unexpected_cfgs)]
+        #[expect(unexpected_cfgs)]
         if cfg!(codspeed) && size > 5_000 {
             continue;
         }
@@ -47,7 +47,6 @@ fn calculate_root_from_leaves(c: &mut Criterion) {
                         .update_leaf(
                             Nibbles::unpack(key),
                             alloy_rlp::encode_fixed_size(value).to_vec(),
-                            &DefaultBlindedProvider,
                         )
                         .unwrap();
                 }
@@ -64,7 +63,7 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
 
     for init_size in [1_000, 10_000, 100_000] {
         // Too slow.
-        #[allow(unexpected_cfgs)]
+        #[expect(unexpected_cfgs)]
         if cfg!(codspeed) && init_size > 10_000 {
             continue;
         }
@@ -73,7 +72,7 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
 
         for update_size in [100, 1_000, 5_000, 10_000] {
             // Too slow.
-            #[allow(unexpected_cfgs)]
+            #[expect(unexpected_cfgs)]
             if cfg!(codspeed) && update_size > 1_000 {
                 continue;
             }
@@ -85,7 +84,9 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                 // hash builder
                 let benchmark_id = BenchmarkId::new(
                     "hash builder",
-                    format!("init size {init_size} | update size {update_size} | num updates {num_updates}"),
+                    format!(
+                        "init size {init_size} | update size {update_size} | num updates {num_updates}"
+                    ),
                 );
                 group.bench_function(benchmark_id, |b| {
                     b.iter_with_setup(
@@ -130,7 +131,7 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                                         )
                                     };
 
-                                let walker = TrieWalker::new(
+                                let walker = TrieWalker::storage_trie(
                                     InMemoryStorageTrieCursor::new(
                                         B256::ZERO,
                                         NoopStorageTrieCursor::default(),
@@ -138,7 +139,7 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                                     ),
                                     prefix_set,
                                 );
-                                let mut node_iter = TrieNodeIter::new(
+                                let mut node_iter = TrieNodeIter::storage_trie(
                                     walker,
                                     HashedPostStateStorageCursor::new(
                                         NoopHashedStorageCursor::default(),
@@ -178,7 +179,9 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                 // sparse trie
                 let benchmark_id = BenchmarkId::new(
                     "sparse trie",
-                    format!("init size {init_size} | update size {update_size} | num updates {num_updates}"),
+                    format!(
+                        "init size {init_size} | update size {update_size} | num updates {num_updates}"
+                    ),
                 );
                 group.bench_function(benchmark_id, |b| {
                     b.iter_with_setup(
@@ -189,7 +192,6 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                                     .update_leaf(
                                         Nibbles::unpack(key),
                                         alloy_rlp::encode_fixed_size(value).to_vec(),
-                                        &DefaultBlindedProvider,
                                     )
                                     .unwrap();
                             }
@@ -203,7 +205,6 @@ fn calculate_root_from_leaves_repeated(c: &mut Criterion) {
                                         .update_leaf(
                                             Nibbles::unpack(key),
                                             alloy_rlp::encode_fixed_size(value).to_vec(),
-                                            &DefaultBlindedProvider,
                                         )
                                         .unwrap();
                                 }
